@@ -323,7 +323,7 @@ jobs:
   clang-latest-ubsan:
     executor: linux-clang-latest
     environment:
-      CMAKE_OPTIONS: -DSANITIZE=undefined,implicit-conversion,nullability
+      CMAKE_OPTIONS: -DSANITIZE=undefined,implicit-conversion,nullability -DCMAKE_CXX_CLANG_TIDY=clang-tidy
       UBSAN_OPTIONS: halt_on_error=1
     steps:
       - build
