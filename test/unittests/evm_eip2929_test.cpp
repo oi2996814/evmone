@@ -8,7 +8,7 @@
 #include "evm_fixture.hpp"
 
 using namespace evmc::literals;
-using evmone::test::evm;
+using namespace evmone::test;
 
 TEST_P(evm, eip2929_case1)
 {
@@ -16,7 +16,7 @@ TEST_P(evm, eip2929_case1)
     rev = EVMC_BERLIN;
     msg.sender = 0x0000000000000000000000000000000000000000_address;
     msg.recipient = 0x000000000000000000000000636F6E7472616374_address;
-    const auto code =
+    const bytecode code =
         "0x60013f5060023b506003315060f13f5060f23b5060f3315060f23f5060f33b5060f1315032315030315000";
 
     execute(code);
@@ -57,7 +57,7 @@ TEST_P(evm, eip2929_case2)
     rev = EVMC_BERLIN;
     msg.sender = 0x0000000000000000000000000000000000000000_address;
     msg.recipient = 0x000000000000000000000000636F6E7472616374_address;
-    const auto code = "0x60006000600060ff3c60006000600060ff3c600060006000303c00";
+    const bytecode code = "0x60006000600060ff3c60006000600060ff3c600060006000303c00";
 
     execute(code);
     EXPECT_GAS_USED(EVMC_SUCCESS, 2835);
@@ -78,7 +78,7 @@ TEST_P(evm, eip2929_case3)
     rev = EVMC_BERLIN;
     msg.sender = 0x0000000000000000000000000000000000000000_address;
     msg.recipient = 0x000000000000000000000000636F6E7472616374_address;
-    const auto code = "0x60015450601160015560116002556011600255600254600154";
+    const bytecode code = "0x60015450601160015560116002556011600255600254600154";
 
     execute(code);
     EXPECT_GAS_USED(EVMC_SUCCESS, 44529);
@@ -91,7 +91,8 @@ TEST_P(evm, eip2929_case4)
     rev = EVMC_BERLIN;
     msg.sender = 0x0000000000000000000000000000000000000000_address;
     msg.recipient = 0x000000000000000000000000636F6E7472616374_address;
-    const auto code = "0x60008080808060046000f15060008080808060ff6000f15060008080808060ff6000fa50";
+    const bytecode code =
+        "0x60008080808060046000f15060008080808060ff6000f15060008080808060ff6000fa50";
 
     execute(code);
     EXPECT_GAS_USED(EVMC_SUCCESS, 2869);
@@ -205,14 +206,14 @@ TEST_P(evm, eip2929_sstore_modify_cold)
     host.accounts[msg.recipient].storage[key] = evmc::bytes32{2};
     execute(5006, code);
     EXPECT_GAS_USED(EVMC_SUCCESS, 5006);
-    EXPECT_EQ(host.accounts[msg.recipient].storage[key].value, evmc::bytes32{3});
+    EXPECT_EQ(host.accounts[msg.recipient].storage[key].current, evmc::bytes32{3});
     EXPECT_EQ(host.accounts[msg.recipient].storage[key].access_status, EVMC_ACCESS_WARM);
 
     host.accounts[msg.recipient].storage[key] = evmc::bytes32{2};
     execute(5005, code);
     EXPECT_GAS_USED(EVMC_OUT_OF_GAS, 5005);
     // The storage will be modified anyway, because the cost is checked after.
-    EXPECT_EQ(host.accounts[msg.recipient].storage[key].value, evmc::bytes32{3});
+    EXPECT_EQ(host.accounts[msg.recipient].storage[key].current, evmc::bytes32{3});
     EXPECT_EQ(host.accounts[msg.recipient].storage[key].access_status, EVMC_ACCESS_WARM);
 }
 

@@ -9,7 +9,8 @@
 #include <numeric>
 #include <random>
 
-using evmone::test::evm;
+using namespace evmc::literals;
+using namespace evmone::test;
 
 TEST_P(evm, grow_memory_with_mload)
 {
@@ -19,15 +20,15 @@ TEST_P(evm, grow_memory_with_mload)
     // EXPECT_EQ(hex(code), "");  // Uncomment to get the code dump.
 
     // Pokes the same offset 0 all the time.
-    execute(code, "0000000000000000000000000000000000000000000000000000000000000000");
+    execute(code, 0x00_bytes32);
     EXPECT_GAS_USED(EVMC_SUCCESS, 57356);
 
     // Pokes memory offset increasing by 1, memory grows every 32nd "iteration".
-    execute(code, "0000000000000000000000000000000000000000000000000000000000000001");
+    execute(code, 0x01_bytes32);
     EXPECT_GAS_USED(EVMC_SUCCESS, 57772);
 
     // Pokes memory offset increasing by 32, memory grows every "iteration".
-    execute(code, "0000000000000000000000000000000000000000000000000000000000000020");
+    execute(code, 0x20_bytes32);
     EXPECT_GAS_USED(EVMC_SUCCESS, 102409);
 }
 
@@ -39,15 +40,15 @@ TEST_P(evm, grow_memory_with_mstore)
     // EXPECT_EQ(hex(code), "");  // Uncomment to get the code dump.
 
     // Pokes the same offset 0 all the time.
-    execute(code, "0000000000000000000000000000000000000000000000000000000000000000");
+    execute(code, 0x00_bytes32);
     EXPECT_GAS_USED(EVMC_SUCCESS, 61452);
 
     // Pokes memory offset increasing by 1, memory grows every 32nd "iteration".
-    execute(code, "0000000000000000000000000000000000000000000000000000000000000001");
+    execute(code, 0x01_bytes32);
     EXPECT_GAS_USED(EVMC_SUCCESS, 61868);
 
     // Pokes memory offset increasing by 32, memory grows every "iteration".
-    execute(code, "0000000000000000000000000000000000000000000000000000000000000020");
+    execute(code, 0x20_bytes32);
     EXPECT_GAS_USED(EVMC_SUCCESS, 106505);
 }
 
@@ -63,7 +64,8 @@ TEST_P(evm, jump_around)
     std::iota(std::begin(jump_order), std::end(jump_order), uint16_t{1});
 
     // Shuffle jump order, leaving the highest value in place for the last jump to the code end.
-    std::shuffle(std::begin(jump_order), std::prev(std::end(jump_order)), std::mt19937_64{0});
+    std::mt19937_64 generator{0};  // NOLINT(cert-msc51-cpp)
+    std::shuffle(std::begin(jump_order), std::prev(std::end(jump_order)), generator);
 
     const auto jumppad_code = bytecode{OP_JUMPDEST} + push(OP_PUSH2, "") + OP_JUMP;
     auto code = num_jumps * jumppad_code + OP_JUMPDEST;
@@ -104,8 +106,8 @@ TEST_P(evm, signextend_bench)
     code += calldataload(0);
     for (size_t i = 0; i < num_instr; ++i)
     {
-        code += bytecode{static_cast<evmc_opcode>(OP_DUP2 + (i % std::size(byte_indexes)))} +
-                OP_SIGNEXTEND;
+        code +=
+            bytecode{static_cast<Opcode>(OP_DUP2 + (i % std::size(byte_indexes)))} + OP_SIGNEXTEND;
     }
     code += ret_top();
     ASSERT_EQ(code.size(), 24041);

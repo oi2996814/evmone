@@ -1,41 +1,54 @@
 # evmone: Fast Ethereum Virtual Machine implementation
-# Copyright 2019-2020 The evmone Authors.
+# Copyright 2019 The evmone Authors.
 # SPDX-License-Identifier: Apache-2.0
 
 include(LibraryTools)
 
-hunter_add_package(intx)
-find_package(intx CONFIG REQUIRED)
-
 add_library(evmone
     ${include_dir}/evmone/evmone.h
-    analysis.cpp
-    analysis.hpp
-    baseline.cpp
+    advanced_analysis.cpp
+    advanced_analysis.hpp
+    advanced_execution.cpp
+    advanced_execution.hpp
+    advanced_instructions.cpp
     baseline.hpp
+    baseline_analysis.cpp
+    baseline_execution.cpp
     baseline_instruction_table.cpp
     baseline_instruction_table.hpp
-    execution.cpp
-    execution.hpp
-    instruction_traits.hpp
-    instructions.cpp
+    constants.hpp
+    eof.cpp
+    eof.hpp
     instructions.hpp
     instructions_calls.cpp
-    instructions_impl_map.hpp
-    limits.hpp
-    opcodes_helpers.h
+    instructions_opcodes.hpp
+    instructions_storage.cpp
+    instructions_traits.hpp
+    instructions_xmacro.hpp
     tracing.cpp
     tracing.hpp
     vm.cpp
     vm.hpp
 )
-target_link_libraries(evmone PUBLIC evmc::evmc intx::intx PRIVATE evmc::instructions evmc::hex ethash::keccak)
+target_compile_features(evmone PUBLIC cxx_std_20)
+target_link_libraries(evmone PUBLIC evmc::evmc intx::intx PRIVATE ethash::keccak)
 target_include_directories(evmone PUBLIC
     $<BUILD_INTERFACE:${include_dir}>$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+
+if(EVMONE_X86_64_ARCH_LEVEL GREATER_EQUAL 2)
+    # Add CPU architecture runtime check. The EVMONE_X86_64_ARCH_LEVEL has a valid value.
+    target_sources(evmone PRIVATE cpu_check.cpp)
+    set_source_files_properties(cpu_check.cpp PROPERTIES COMPILE_DEFINITIONS EVMONE_X86_64_ARCH_LEVEL=${EVMONE_X86_64_ARCH_LEVEL})
+endif()
+
 if(CABLE_COMPILER_GNULIKE)
-    target_compile_options(evmone PRIVATE -fno-exceptions)
-    if (NOT SANITIZE MATCHES undefined)
+    target_compile_options(
+        evmone PRIVATE
+        -fno-exceptions
+        $<$<CXX_COMPILER_ID:GNU>:-Wstack-usage=2900>
+    )
+    if(NOT SANITIZE MATCHES undefined)
         # RTTI can be disabled except for UBSan which checks vptr integrity.
         target_compile_options(evmone PRIVATE -fno-rtti)
     endif()

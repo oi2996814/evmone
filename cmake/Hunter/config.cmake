@@ -2,34 +2,16 @@
 # Copyright 2018 The evmone Authors.
 # SPDX-License-Identifier: Apache-2.0
 
+include(hunter_cmake_args)
+
+hunter_cmake_args(
+    ethash
+    CMAKE_ARGS -DETHASH_BUILD_ETHASH=OFF
+)
+
 hunter_config(
     intx
-    VERSION 0.7.0
-    URL https://github.com/chfast/intx/archive/v0.7.0.tar.gz
-    SHA1 d5bacebd6b66f7f3b22c2f7db43696f98951e8c3
-)
-
-hunter_config(
-    ethash
-    VERSION 0.8.0
-    URL https://github.com/chfast/ethash/archive/v0.8.0.tar.gz
-    SHA1 41fd440f70b6a8dfc3fd29b20f471dcbd1345ad0
-    CMAKE_ARGS -DETHASH_BUILD_ETHASH=OFF -DETHASH_BUILD_TESTS=OFF
-)
-
-hunter_config(
-    GTest
-    VERSION 1.11.0
-    URL https://github.com/google/googletest/archive/release-1.11.0.tar.gz
-    SHA1 7b100bb68db8df1060e178c495f3cbe941c9b058
-    CMAKE_ARGS
-    HUNTER_INSTALL_LICENSE_FILES=LICENSE
-    gtest_force_shared_crt=TRUE
-)
-
-hunter_config(
-    benchmark
-    VERSION 1.6.0
-    URL https://github.com/google/benchmark/archive/refs/tags/v1.6.0.tar.gz
-    SHA1 c4d1a9135e779c5507015ccc8c428cb4aca69cef
+    VERSION 0.12.0
+    URL https://github.com/chfast/intx/archive/v0.12.0.tar.gz
+    SHA1 18a64e8e88c50d53325d906c9211daef905b97f4
 )
