@@ -35,3 +35,21 @@ When reviewing changes (code, tests, build scripts, documentation, workflows), e
 - Flag any unclear invariants, missing comments, or undocumented assumptions.
 
 Other suggestions and improvements are welcome as long as they are constructive, actionable, and help improve quality, security, and maintainability.
+
+## Building
+
+This repository uses out-of-source CMake builds. Common build directories live under `build/`, e.g.:
+
+- `build/debug`
+- `build/release`
+
+If a build directory already exists, build it directly:
+
+- `cmake --build build/debug`
+
+## Testing
+
+All tests can be run via CTest. Make sure the build is up to date.
+
+- `ctest --test-dir build/debug --output-on-failure`
+- to filter tests use `-R <regex>`
