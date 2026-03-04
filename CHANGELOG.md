@@ -5,7 +5,7 @@ Documentation of all notable changes to the **evmone** project.
 The format is based on [Keep a Changelog],
 and this project adheres to [Semantic Versioning].
 
-## [0.19.0] — unreleased
+## [0.19.0] — 2026-03-04
 
 ### Added
 
@@ -1193,7 +1193,7 @@ It delivers fully-compatible and high-speed EVM implementation.
 - Exposes [EVMC] 6 ABI.
 - The [intx 0.2.0](https://github.com/chfast/intx/releases/tag/v0.2.0) library is used for 256-bit precision arithmetic. 
 
-[0.19.0]: https://github.com/ethereum/evmone/compare/v0.18.0...master
+[0.19.0]: https://github.com/ethereum/evmone/releases/tag/v0.19.0
 [0.18.0]: https://github.com/ethereum/evmone/releases/tag/v0.18.0
 [0.17.0]: https://github.com/ethereum/evmone/releases/tag/v0.17.0
 [0.16.0]: https://github.com/ethereum/evmone/releases/tag/v0.16.0
