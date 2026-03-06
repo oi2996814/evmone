@@ -63,15 +63,20 @@ constexpr void mul(
 {
     assert(!x.empty());
     assert(!y.empty());
-    assert(r.size() == std::max(x.size(), y.size()));
+    assert(r.size() >= std::max(x.size(), y.size()));
 
     // Ensure y is the shorter one to simplify the implementation and to have shorter outer loop.
     if (x.size() < y.size())
         std::swap(x, y);
 
+    // Iterations where we store high product words (above x/y size).
+    const auto extra = std::min(y.size(), r.size() - x.size());
+
     std::ranges::fill(r, 0);
-    for (size_t j = 0; j < y.size(); ++j)
-        addmul(r.subspan(j), r.subspan(j), x.subspan(0, x.size() - j), y[j]);
+    for (size_t j = 0; j < extra; ++j)
+        r[j + x.size()] = addmul(r.subspan(j, x.size()), r.subspan(j, x.size()), x, y[j]);
+    for (size_t j = extra; j < y.size(); ++j)
+        addmul(r.subspan(j), r.subspan(j), x.first(r.size() - j), y[j]);
 }
 
 /// Computes x[] = 2 - x[].
@@ -85,10 +90,19 @@ constexpr void neg_add2(std::span<uint64_t> x) noexcept
         std::tie(*it, c) = intx::subc(0, *it, c);
 }
 
-/// Loads big-endian bytes into little-endian uint64 words.
-void load(std::span<uint64_t> r, std::span<const uint8_t> data) noexcept
+/// Trims a little-endian word array to significant words.
+template <typename T>
+constexpr std::span<T> trim(std::span<T> x) noexcept
 {
-    const auto r_bytes = std::as_writable_bytes(r);
+    const auto it = std::ranges::find_if(x.rbegin(), x.rend(), [](auto w) { return w != 0; });
+    return x.first(static_cast<size_t>(std::ranges::distance(it, x.rend())));
+}
+
+/// Loads big-endian bytes into little-endian uint64 words.
+/// Returns a subspan trimmed to significant (non-zero) words.
+std::span<uint64_t> load(std::span<uint64_t> storage, std::span<const uint8_t> data) noexcept
+{
+    const auto r_bytes = std::as_writable_bytes(storage);
     assert(r_bytes.size() >= data.size());
     const auto padding = r_bytes.size() - data.size();
 
@@ -98,9 +112,11 @@ void load(std::span<uint64_t> r, std::span<const uint8_t> data) noexcept
 
     // Convert from big-endian byte layout to little-endian words:
     // reverse word order and byte-swap each word.
-    std::ranges::reverse(r);
-    for (auto& w : r)
+    std::ranges::reverse(storage);
+    for (auto& w : storage)
         w = bswap(w);
+
+    return trim(storage);
 }
 
 /// Stores little-endian uint64 words to big-endian bytes.
@@ -130,14 +146,6 @@ void store(std::span<uint8_t> r, std::span<const uint64_t> words) noexcept
     std::ranges::fill(r.subspan(0, pos), uint8_t{0});
 }
 
-/// Trims a little-endian word array to significant words.
-template <typename T>
-constexpr std::span<T> trim(std::span<T> x) noexcept
-{
-    const auto it = std::ranges::find_if(x.rbegin(), x.rend(), [](auto w) { return w != 0; });
-    return x.first(static_cast<size_t>(std::ranges::distance(it, x.rend())));
-}
-
 /// Compares two same-size little-endian word arrays as unsigned integers: returns true if x < y.
 constexpr bool less(std::span<const uint64_t> x, std::span<const uint64_t> y) noexcept
 {
@@ -145,34 +153,21 @@ constexpr bool less(std::span<const uint64_t> x, std::span<const uint64_t> y) no
     return std::ranges::lexicographical_compare(std::views::reverse(x), std::views::reverse(y));
 }
 
-/// Counts trailing zeros in a non-zero little-endian word array.
-constexpr unsigned ctz(std::span<const uint64_t> x) noexcept
-{
-    assert(std::ranges::any_of(x, [](auto w) { return w != 0; }));
-    const auto it = std::ranges::find_if(x, [](auto w) { return w != 0; });
-    return static_cast<unsigned>((it - x.begin()) * 64 + std::countr_zero(*it));
-}
-
-/// Checks if a non-zero multi-word number is a power of two.
-constexpr bool is_pow2(std::span<const uint64_t> x) noexcept
-{
-    assert(std::ranges::any_of(x, [](auto w) { return w != 0; }));
-    const auto it = std::ranges::find_if(x, [](auto w) { return w != 0; });
-    return std::has_single_bit(*it) &&
-           std::ranges::none_of(it + 1, x.end(), [](auto w) { return w != 0; });
-}
-
 /// Right-shifts a little-endian word array by k bits.
-void shr(std::span<uint64_t> r, std::span<const uint64_t> x, unsigned k) noexcept
+/// Returns a subspan trimmed to significant (non-zero) words.
+std::span<const uint64_t> shr(
+    std::span<uint64_t> r, std::span<const uint64_t> x, unsigned k) noexcept
 {
-    const size_t n = x.size();
-    assert(r.size() == n);
+    const auto n = x.size();
+    assert(r.size() >= n);
     assert(k < n * 64);
     const auto word_shift = k / 64;
     const auto bit_shift = k % 64;
 
-    // Shift words.
-    std::ranges::copy(x.subspan(word_shift), r.begin());
+    // Shift words. std::copy requires d_first ∉ [first, last).
+    // When word_shift == 0 and r aliases x, it would be a self-copy — skip it.
+    if (word_shift != 0 || r.data() != x.data())
+        std::ranges::copy(x.subspan(word_shift), r.begin());
     std::ranges::fill(r.subspan(n - word_shift), uint64_t{0});
 
     // Shift remaining bits in place.
@@ -182,6 +177,37 @@ void shr(std::span<uint64_t> r, std::span<const uint64_t> x, unsigned k) noexcep
             r[i] = (r[i] >> bit_shift) | (r[i + 1] << (64 - bit_shift));
         r[n - word_shift - 1] >>= bit_shift;
     }
+
+    return trim(r.first(n));
+}
+
+/// Result of loading the modulus: the odd part and trailing zero count.
+struct ModLoad
+{
+    std::span<const uint64_t> mod_odd;  ///< Trimmed odd part (shifted in-place).
+    unsigned mod_tz;                    ///< Total trailing zero bits (0 = odd modulus).
+};
+
+/// Loads modulus from big-endian bytes and extracts the odd part.
+/// The odd part is shifted in-place within the storage buffer.
+ModLoad load_mod(std::span<uint64_t> storage, std::span<const uint8_t> data) noexcept
+{
+    const auto top = load(storage, data);
+    assert(!top.empty());  // Modulus of zero must be handled outside.
+
+    // Find first non-zero word from bottom.
+    const auto it = std::ranges::find_if(top, [](auto w) { return w != 0; });
+    // Always found: top is trimmed so top.back() != 0.
+
+    const auto tz_words = static_cast<size_t>(it - top.begin());
+    const auto bit_shift = static_cast<unsigned>(std::countr_zero(*it));
+    const auto mod_tz = static_cast<unsigned>(tz_words * 64 + bit_shift);
+
+    if (mod_tz == 0)
+        return {top, 0};
+
+    // Right-shift in-place to extract the odd part.
+    return {shr(storage, top, mod_tz), mod_tz};
 }
 
 
@@ -230,6 +256,7 @@ void rem(std::span<uint64_t> r, std::span<const uint64_t> u, std::span<const uin
         un = un.first(un.size() - 1);
 
     const auto denormalize = [&r, shift](std::span<const uint64_t> x) noexcept {
+        assert(shift < 64);  // Normalization shift is sub-word.
         assert(r.size() >= x.size());
         shr(r.first(x.size()), x, shift);
         std::ranges::fill(r.subspan(x.size()), uint64_t{0});
@@ -315,6 +342,7 @@ void mul_amm(std::span<uint64_t> r, std::span<const uint64_t> y, std::span<const
     assert(y.size() == n);
     assert(mod.size() == n);
     assert(t.size() == n);
+    assert(mod.back() != 0);
 
     const auto t_lo = t.subspan(0, n - 1);
     const auto t_hi = t.subspan(1);
@@ -346,16 +374,10 @@ void mul_amm(std::span<uint64_t> r, std::span<const uint64_t> y, std::span<const
 void modexp_odd(std::span<uint64_t> result, std::span<const uint64_t> base, Exponent exp,
     std::span<const uint64_t> mod) noexcept
 {
-    base = trim(base);
-    mod = trim(mod);
-    assert(!mod.empty());
+    assert(!mod.empty() && mod.back() != 0);    // mod must be trimmed.
+    assert(!base.empty() && base.back() != 0);  // base must be trimmed.
+    assert(!result.empty());
     assert(exp.bit_width() != 0);
-
-    if (base.empty()) [[unlikely]]  // base is 0: 0^exp = 0 for exp > 0.
-    {
-        std::ranges::fill(result, uint64_t{0});
-        return;
-    }
 
     const auto n = mod.size();
     const auto mod_inv = -evmmax::modinv(mod[0]);
@@ -394,7 +416,7 @@ void modexp_odd(std::span<uint64_t> result, std::span<const uint64_t> base, Expo
     assert(less(r, mod));
 
     const auto [_, out] = std::ranges::copy(r, result.begin());
-    std::fill(out, result.end(), uint64_t{0});
+    std::ranges::fill(std::span{out, result.end()}, uint64_t{0});
 }
 
 /// Trims the multi-word number x[] to k bits.
@@ -413,23 +435,25 @@ void mask_pow2(std::span<uint64_t> x, unsigned k) noexcept
 /// Also, the same amount of the result words are produced. The rest is not modified.
 void modexp_pow2(std::span<uint64_t> r, std::span<const uint64_t> base, Exponent exp, unsigned k)
 {
-    assert(k != 0);                   // Modulus of 1 should be covered as "odd".
-    assert(exp.bit_width() != 0);     // Exponent of zero must be handled outside.
-    assert(r.data() != base.data());  // No in-place operation.
+    assert(k != 0);                             // Modulus of 1 should be covered as "odd".
+    assert(exp.bit_width() != 0);               // Exponent of zero must be handled outside.
+    assert(!base.empty() && base.back() != 0);  // base must be trimmed.
+    assert(r.data() != base.data());            // No in-place operation.
 
-    const auto num_pow2_words = (k + 63) / 64;
+    const size_t num_pow2_words = (k + 63) / 64;
     assert(r.size() >= num_pow2_words);
-    assert(base.size() >= num_pow2_words);
 
-    const auto base_k = base.subspan(0, num_pow2_words);
     auto r_k = r.subspan(0, num_pow2_words);
+
+    const auto base_k = base.subspan(0, std::min(base.size(), num_pow2_words));
 
     // Allocate temporary storage for iterations.
     // TODO: Move to stack if the size is small enough or provide from the caller.
     const auto tmp_storage = std::make_unique_for_overwrite<uint64_t[]>(num_pow2_words);
     auto tmp = std::span{tmp_storage.get(), num_pow2_words};
 
-    std::ranges::copy(base_k, r_k.begin());
+    const auto [_, pad] = std::ranges::copy(base_k, r_k.begin());
+    std::ranges::fill(std::span{pad, r_k.end()}, uint64_t{0});
 
     for (auto i = exp.bit_width() - 1; i != 0; --i)
     {
@@ -454,7 +478,6 @@ void modexp_pow2(std::span<uint64_t> r, std::span<const uint64_t> base, Exponent
 void modinv_pow2(std::span<uint64_t> r, std::span<const uint64_t> x) noexcept
 {
     assert(!x.empty() && (x[0] & 1) != 0);  // x must be odd.
-    assert(r.size() <= x.size());           // Truncating version.
     assert(!r.empty());
 
     r[0] = evmmax::modinv(x[0]);  // Good start: 64 correct bits.
@@ -473,9 +496,10 @@ void modinv_pow2(std::span<uint64_t> r, std::span<const uint64_t> x) noexcept
         const auto t1 = tmp.subspan(0, n);
         const auto t2 = tmp.subspan(n, n);
 
-        mul(t1, x.subspan(0, n), r.subspan(0, i));  // t1 = x * inv
-        neg_add2(t1);                               // t1 = 2 - x * inv
-        mul(t2, t1, r.subspan(0, i));               // t2 = inv * (2 - x * inv)
+        // Clamp x to available words: high words beyond x.size() are implicitly zero.
+        mul(t1, x.subspan(0, std::min(n, x.size())), r.subspan(0, i));  // t1 = x * inv
+        neg_add2(t1);                                                   // t1 = 2 - x * inv
+        mul(t2, t1, r.subspan(0, i));                                   // t2 = inv * (2 - x * inv)
         // TODO: Consider implementing the step as (inv << 1) - (x * inv * inv).
 
         // TODO: Avoid copy by swapping buffers.
@@ -490,30 +514,28 @@ void modexp_even(std::span<uint64_t> r, const std::span<const uint64_t> base, Ex
     // Follow "Montgomery reduction with even modulus" by Çetin Kaya Koç.
     // https://cetinkayakoc.net/docs/j34.pdf
     assert(k != 0);
-    assert(r.size() == mod_odd.size());
+    assert(!base.empty() && base.back() != 0);        // base must be trimmed.
+    assert(!mod_odd.empty() && mod_odd.back() != 0);  // mod_odd must be trimmed.
 
-    const auto num_pow2_words = (k + 63) / 64;
+    const size_t num_pow2_words = (k + 63) / 64;
+    assert(r.size() >= std::max(mod_odd.size(), num_pow2_words));
+
     const auto tmp_storage =
-        std::make_unique_for_overwrite<uint64_t[]>(mod_odd.size() + num_pow2_words * 2);
-    const auto tmp = std::span{tmp_storage.get(), mod_odd.size() + num_pow2_words * 2};
-    const auto tmp1 = tmp.subspan(0, mod_odd.size());
-    const auto tmp2 = tmp.subspan(mod_odd.size(), num_pow2_words);
-    const auto tmp3 = tmp.subspan(mod_odd.size() + num_pow2_words, num_pow2_words);
+        std::make_unique_for_overwrite<uint64_t[]>(r.size() + num_pow2_words * 2);
+    const auto x1 = std::span{tmp_storage.get(), r.size()};
+    const auto mod_odd_inv = std::span{tmp_storage.get() + r.size(), num_pow2_words};
+    const auto y = std::span{tmp_storage.get() + r.size() + num_pow2_words, num_pow2_words};
 
-    const auto x1 = tmp1;
     modexp_odd(x1, base, exp, mod_odd);
 
     const auto x2 = r.subspan(0, num_pow2_words);  // Reuse the result storage.
     modexp_pow2(x2, base, exp, k);
 
-    const auto mod_odd_inv = tmp2;
     modinv_pow2(mod_odd_inv, mod_odd);
-
-    const auto y = tmp3;
-    sub(x2, std::span(x1).subspan(0, num_pow2_words));
+    sub(x2, x1.subspan(0, num_pow2_words));
     mul(y, x2, mod_odd_inv);
     mask_pow2(y, k);
-    mul(r, y, mod_odd);
+    mul(r, mod_odd, y);
     add(r, x1);
 }
 }  // namespace
@@ -525,38 +547,35 @@ void modexp(std::span<const uint8_t> base_bytes, std::span<const uint8_t> exp_by
 {
     const Exponent exp{exp_bytes};
 
-    const auto w = (std::max(mod_bytes.size(), base_bytes.size()) + 7) / 8;
-    const auto storage = std::make_unique_for_overwrite<uint64_t[]>(w * 4);
-    const auto base = std::span{storage.get(), w};
-    load(base, base_bytes);
-    const auto mod = std::span{storage.get() + w, w};
-
-    // TODO: While loading modulus, we can check if it is zero and split the even part.
-    load(mod, mod_bytes);
-    assert(std::ranges::any_of(mod, [](auto x) { return x != 0; }));  // Modulus of zero must be
-                                                                      // handled outside.
-    const auto result = std::span{storage.get() + w * 2, w};
+    const auto base_size = (base_bytes.size() + 7) / 8;
+    const auto mod_size = (mod_bytes.size() + 7) / 8;
+    const auto storage = std::make_unique_for_overwrite<uint64_t[]>(base_size + mod_size * 2);
+    const auto base = load({storage.get(), base_size}, base_bytes);
+    const auto [mod_odd, mod_tz] = load_mod({storage.get() + base_size, mod_size}, mod_bytes);
+    assert(!mod_odd.empty());  // Modulus of zero must be handled outside.
+    const auto result = std::span{storage.get() + base_size + mod_size, mod_size};
     std::ranges::fill(result, uint64_t{0});
 
     if (exp.bit_width() == 0)  // Exponent is 0:
     {
         // Result is 1 except when mod is 1.
-        if (mod[0] != 1 || std::ranges::any_of(mod.subspan(1), [](auto x) { return x != 0; }))
+        if (mod_tz != 0 || mod_odd.size() != 1 || mod_odd[0] != 1)  // mod != 1
             result[0] = 1;
     }
-    else if (const auto mod_tz = ctz(mod); mod_tz == 0)  // - odd
+    else if (base.empty())  // base is 0: 0^exp = 0 for exp > 0.
     {
-        modexp_odd(result, base, exp, mod);
     }
-    else if (is_pow2(mod))  // - power of 2
+    else if (mod_tz == 0)  // - odd
+    {
+        modexp_odd(result, base, exp, mod_odd);
+    }
+    else if (mod_odd.size() == 1 && mod_odd[0] == 1)  // - power of 2
     {
         const auto n = (mod_tz + 63) / 64;
-        modexp_pow2(std::span(result).subspan(0, n), std::span{base}.subspan(0, n), exp, mod_tz);
+        modexp_pow2(result.subspan(0, n), base, exp, mod_tz);
     }
     else  // - even
     {
-        const auto mod_odd = std::span{storage.get() + w * 3, w};
-        shr(mod_odd, mod, mod_tz);
         modexp_even(result, base, exp, mod_odd, mod_tz);
     }
 
