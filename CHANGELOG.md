@@ -5,6 +5,29 @@ Documentation of all notable changes to the **evmone** project.
 The format is based on [Keep a Changelog],
 and this project adheres to [Semantic Versioning].
 
+## [0.20.0] — 2026-04-07
+
+### Added
+
+- Build option `-DASSERTIONS=ON` to force assertions in release builds.
+  [#1474](https://github.com/ipsilon/evmone/pull/1474)
+
+### Changed
+
+- **Modular exponentiation (`modexp`) continued optimizations**:
+  CRT-based flow unified, memory allocation consolidated, scratch space reduced,
+  256-bit Montgomery multiplication specialized, first multiplication iteration optimized.
+  [#1464](https://github.com/ipsilon/evmone/pull/1464)
+  [#1465](https://github.com/ipsilon/evmone/pull/1465)
+  [#1466](https://github.com/ipsilon/evmone/pull/1466)
+  [#1467](https://github.com/ipsilon/evmone/pull/1467)
+  [#1469](https://github.com/ipsilon/evmone/pull/1469)
+  [#1470](https://github.com/ipsilon/evmone/pull/1470)
+  [#1471](https://github.com/ipsilon/evmone/pull/1471)
+  [#1472](https://github.com/ipsilon/evmone/pull/1472)
+  [#1473](https://github.com/ipsilon/evmone/pull/1473)
+  [#1475](https://github.com/ipsilon/evmone/pull/1475)
+
 ## [0.19.0] — 2026-03-04
 
 ### Added
@@ -1193,6 +1216,7 @@ It delivers fully-compatible and high-speed EVM implementation.
 - Exposes [EVMC] 6 ABI.
 - The [intx 0.2.0](https://github.com/chfast/intx/releases/tag/v0.2.0) library is used for 256-bit precision arithmetic. 
 
+[0.20.0]: https://github.com/ethereum/evmone/releases/tag/v0.20.0
 [0.19.0]: https://github.com/ethereum/evmone/releases/tag/v0.19.0
 [0.18.0]: https://github.com/ethereum/evmone/releases/tag/v0.18.0
 [0.17.0]: https://github.com/ethereum/evmone/releases/tag/v0.17.0
