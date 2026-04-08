@@ -508,6 +508,8 @@ jobs:
 
   gcc-min:
     executor: linux-gcc-min
+    environment:
+      CMAKE_OPTIONS: -DEVMC_TOOLS=OFF
     steps:
       - build
       - test

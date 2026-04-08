@@ -5,7 +5,7 @@
 set(PREFIX ${PROJECT_NAME}/integration)
 
 get_target_property(EVMONE_LIB_TYPE evmone TYPE)
-if(EVMONE_LIB_TYPE STREQUAL SHARED_LIBRARY)
+if(EVMONE_LIB_TYPE STREQUAL SHARED_LIBRARY AND TARGET evmc::tool)
 
     add_test(NAME ${PREFIX}/histogram COMMAND evmc::tool --vm $<TARGET_FILE:evmone>,histogram run 6000808080800101010200)
     set_tests_properties(
