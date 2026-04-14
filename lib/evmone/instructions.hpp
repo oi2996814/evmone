@@ -74,6 +74,27 @@ constexpr void fast_swap(uint256& x, uint256& y) noexcept
     y[3] = t3;
 }
 
+/// Decode DUPN/SWAPN immediate. Returns the stack depth n [17–235],
+/// or std::nullopt if the immediate is in the forbidden range [0x5b–0x7f].
+constexpr std::optional<int> decode_dupn_swapn_imm(uint8_t imm) noexcept
+{
+    if (imm >= 0x5b && imm <= 0x7f)
+        return std::nullopt;
+    return static_cast<uint8_t>(imm + 0x91);
+}
+
+/// Decode EXCHANGE immediate. Returns the pair (n, m) with 1 <= n < m and n + m <= 30,
+/// or std::nullopt if the immediate is in the forbidden range [0x52–0x7f].
+constexpr std::optional<std::pair<int, int>> decode_exchange_imm(uint8_t imm) noexcept
+{
+    if (imm >= 0x52 && imm <= 0x7f)
+        return std::nullopt;
+    const auto k = imm ^ 0x8f;
+    const auto q = k / 16;
+    const auto r = k % 16;
+    return (q < r) ? std::pair{q + 1, r + 1} : std::pair{r + 1, 29 - q};
+}
+
 constexpr auto max_buffer_size = std::numeric_limits<uint32_t>::max();
 
 /// The size of the EVM 256-bit word.
@@ -887,6 +908,66 @@ inline void swap(StackTop stack) noexcept
 {
     static_assert(N >= 1 && N <= 16);
     fast_swap(stack.top(), stack[N]);
+}
+
+inline code_iterator dupn(StackTop stack, ExecutionState& state, code_iterator pos) noexcept
+{
+    const auto n = decode_dupn_swapn_imm(pos[1]);
+    if (!n)
+    {
+        state.status = EVMC_UNDEFINED_INSTRUCTION;
+        return nullptr;
+    }
+
+    // Stack overflow is checked by check_requirements() (stack_height_change=+1).
+    const auto stack_size = stack.end() - state.stack_space.bottom();
+    if (*n > stack_size)
+    {
+        state.status = EVMC_STACK_UNDERFLOW;
+        return nullptr;
+    }
+
+    stack.push(stack[*n - 1]);
+    return pos + 2;
+}
+
+inline code_iterator swapn(StackTop stack, ExecutionState& state, code_iterator pos) noexcept
+{
+    const auto n = decode_dupn_swapn_imm(pos[1]);
+    if (!n)
+    {
+        state.status = EVMC_UNDEFINED_INSTRUCTION;
+        return nullptr;
+    }
+
+    if (const auto stack_size = stack.end() - state.stack_space.bottom(); *n >= stack_size)
+    {
+        state.status = EVMC_STACK_UNDERFLOW;
+        return nullptr;
+    }
+
+    fast_swap(stack.top(), stack[*n]);
+    return pos + 2;
+}
+
+inline code_iterator exchange(StackTop stack, ExecutionState& state, code_iterator pos) noexcept
+{
+    const auto decoded = decode_exchange_imm(pos[1]);
+    if (!decoded)
+    {
+        state.status = EVMC_UNDEFINED_INSTRUCTION;
+        return nullptr;
+    }
+
+    const auto [n, m] = *decoded;
+    if (const auto stack_size = stack.end() - state.stack_space.bottom(); m >= stack_size)
+    {
+        state.status = EVMC_STACK_UNDERFLOW;
+        return nullptr;
+    }
+
+    fast_swap(stack[n], stack[m]);
+    return pos + 2;
 }
 
 inline Result mcopy(StackTop stack, int64_t gas_left, ExecutionState& state) noexcept
