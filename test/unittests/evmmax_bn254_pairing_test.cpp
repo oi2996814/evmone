@@ -34,8 +34,7 @@ TEST(evmmax, bn254_pairing)
         },
     };
     // -Q1:
-    const auto nQ1 =
-        ExtPoint{Q1.x, {Curve::FIELD_PRIME - Q1.y.first, Curve::FIELD_PRIME - Q1.y.second}};
+    const auto nQ1 = -Q1;
     // -Q1 * 16:
     const auto nQ1_16 = ExtPoint{
         {
@@ -123,13 +122,6 @@ TEST(evmmax, bn254_pairing_invalid_input)
     EXPECT_EQ(pairing_check(valid_input), false);
 
     {
-        // Coordinate not a field element
-        auto input = valid_input;
-        input[0].second.x.second = Curve::FIELD_PRIME;
-        EXPECT_EQ(pairing_check(input), std::nullopt);
-    }
-
-    {
         // Point P (G1) not on curve
         auto input = valid_input;
         input[0].first.x += Curve::Fp{1};
@@ -139,12 +131,12 @@ TEST(evmmax, bn254_pairing_invalid_input)
     {
         // Point Q (G2) not on curve
         auto input = valid_input;
-        input[0].second.x.first += 1;
+        input[0].second.x.coeffs[0] += Fq{1};
         EXPECT_EQ(pairing_check(input), std::nullopt);
     }
 
     {
-        // Q not in proper group. Q id a member of small subgroup on twisted curve over Fq^2
+        // Q not in proper group. Q is a member of small subgroup on twisted curve over Fq^2.
         const ExtPoint Q{
             {
                 0x13d841ba7ff3c6efd6870c3fea13a3ecab0423af5e4db9c5d28a6b46a05cd57b_u256,
