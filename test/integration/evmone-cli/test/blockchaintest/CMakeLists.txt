@@ -22,6 +22,11 @@ add_test(
     NAME ${PREFIX}/eip7778_block_gas
     COMMAND evmone-blockchaintest ${TESTS1}/eip7778_block_gas.json --trace
 )
+set_tests_properties(
+    ${PREFIX}/eip7778_block_gas PROPERTIES
+    # The trace is --trace reaching the VM; the count stands in for the exit code the regex hides.
+    PASS_REGULAR_EXPRESSION "\"opName\":\"SSTORE\".*= 1 passed in"
+)
 
 # A block invalid by its signature must not be judged by another check.
 add_test(
@@ -41,8 +46,8 @@ add_test(
 )
 set_tests_properties(
     ${PREFIX}/unsupported_rlp PROPERTIES
-    PASS_REGULAR_EXPRESSION
-    "tests with invalidly rlp-encoded blocks are not supported.*0 passed, 1 skipped"
+    # Why it is skipped is a loader unit test; this is the tool's whole-file skip verdict.
+    PASS_REGULAR_EXPRESSION "0 passed, 1 skipped"
 )
 
 # A PASS_REGULAR_EXPRESSION makes CTest ignore the exit code, so run it again for that alone.
